@@ -1,4 +1,4 @@
-package com.void.aitraining;
+package com.aitraining.sim;
 import android.app.Activity;
 import android.os.Bundle;
 import android.webkit.WebView;
