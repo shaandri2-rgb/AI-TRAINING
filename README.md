@@ -1,45 +1,58 @@
 # MY FIRST AI — THE HUMAN INSIDE THE GAME
 
-Android-first 3D AI-training simulation prototype.
+Android-first 3D AI-training game prototype.
 
-## Build the APK
+## Android build
 
-Every push to `main` starts the **Build Android APK** GitHub Actions workflow. When it succeeds:
+Every push to `main` starts **Build Android APK**. When the GitHub Actions run succeeds:
 1. Open the repository's **Actions** tab.
-2. Select the latest successful **Build Android APK** run.
-3. Under **Artifacts**, download **My-First-AI-BANC-3D**.
-4. Extract the artifact ZIP and install `app-debug.apk` on Android.
+2. Open the newest successful **Build Android APK** run.
+3. Download the artifact named **My-First-AI-FlyWire-FAFB-v783**.
+4. Extract the artifact ZIP and install `app-debug.apk`.
 
-The downloaded artifact ZIP is only GitHub's packaging. The installable file inside is the APK.
+The artifact ZIP is only GitHub's packaging; the APK inside is the installable Android app.
 
-## BANC fruit-fly connectome integration
+## Whole-brain connectome
 
-The CI build downloads the public BANC v888 metadata and neuron-to-neuron edge table from Harvard Dataverse, then extracts a compact **50-neuron leg sensor → interneuron → motor circuit** into the APK. The Android Java engine runs a lightweight leaky-integrate-and-fire (LIF) approximation at runtime. Its motor activity is mapped to movement and turning of the 3D humanoid avatar. The Brain tab shows the selected neuron IDs, measured connections and live spike activity.
+The build downloads the published FlyWire FAFB v783 model files:
+- `Completeness_783.csv`
+- `Connectivity_783.parquet`
 
-Important scientific limits:
-- BANC v888 contains a much larger adult female fruit-fly connectome; this mobile build packages only a selected 50-neuron leg-control subnetwork, not all 158,262 neurons.
-- The connectivity is drawn from the published BANC v888 edge list. Membrane dynamics, signal scaling, game sensory inputs and the avatar mapping are calibrated engineering approximations, not a validated reproduction of the original Minecraft mod or a complete biological fly.
-- The fruit-fly circuit controls movement/reactions only. The chat and teaching/memory feature remain a separate local scripted system. This does not create a conscious or human-level AI.
-- The full source tables are downloaded during CI and are not stored in the repository. The APK contains only the compact extracted circuit.
+The packer preserves every neuron and every directed connection in the Shiu et al. v783 computational model, using a compact compressed-sparse-row (CSR) binary asset. The Android app loads that network and runs a lightweight leaky-integrate-and-fire (LIF) approximation.
 
-Dataset citation: Bates, Phelps, Kim, Yang et al., “Distributed control circuits across a brain-and-nerve-cord connectome,” *Nature* (2026), BANC v888, Harvard Dataverse DOI: [10.7910/DVN/7WTH1N](https://doi.org/10.7910/DVN/7WTH1N). BANC v888 data are released under CC BY 4.0; attribution is shown in the Brain panel.
+**This is a whole-connectome-based mobile simulation, not a perfect reproduction of the original Brian2 model.** The original model uses Brian2, its published parameters and its own runtime. This Android implementation uses a simplified fixed-step Java runner to fit a phone.
 
-## Other prototype features
+### How the brain affects the game
 
-- Touch-friendly 3D WebGL world and humanoid AI character.
-- Local chat simulation and teachable memory entries.
+- Touch, gait and nearby obstacles provide experimental stimulation signals to 24 distributed network input ports.
+- Network activity is measured and passed into an experimental game-director mapping.
+- The director can create an obstacle, tree or ball in the 3D world.
+- The AI avatar also receives an experimental movement signal.
+
+Important scientific limit: those 24 input ports are distributed by index, not selected from a verified sensory-neuron annotation list. The director and avatar mappings are game-engine rules, not proof that the fly brain naturally chooses those objects or has human-like thoughts. This is a connectome simulation, not a conscious fly or human-level AI.
+
+## Data and citations
+
+- FlyWire FAFB v783 connectome: Dorkenwald et al., “Neuronal wiring diagram of an adult brain,” *Nature* 634, 124–138 (2024), [DOI 10.1038/s41586-024-07558-y](https://doi.org/10.1038/s41586-024-07558-y).
+- Whole-brain annotations: Schlegel et al., *Nature* 634, 139–152 (2024), [DOI 10.1038/s41586-024-07686-5](https://doi.org/10.1038/s41586-024-07686-5).
+- LIF model: Shiu et al., “A Drosophila computational brain model reveals sensorimotor processing,” *Nature* 634, 210–219 (2024), [DOI 10.1038/s41586-024-07763-9](https://doi.org/10.1038/s41586-024-07763-9).
+- Model implementation: [philshiu/Drosophila_brain_model](https://github.com/philshiu/Drosophila_brain_model).
+
+The FlyWire data have their own terms and attribution requirements. Check the current [FlyWire data terms](https://flywire.ai/) before redistribution or commercial use. The build downloads source data at build time; the original source files are not committed to this repository.
+
+## Other game features
+
+- Touch-friendly WebGL 3D world and humanoid AI avatar.
+- Local chat teaching and memory entries (scripted; no external LLM is connected).
 - Hunger drains over ten real-world hours, including while the app is closed.
 - Food buttons restore hunger.
 - Creator commands: `/obstacle 1` through `/obstacle 3`, `/wall 1`, `/cube 1`, `/ball 1`, `/tree 1`, `/remove`, and `/clear`.
-- Memory, live brain-activity, and creator panels.
-- Local progress saved on the device.
+- Memory, brain activity and creator panels.
+- Local progress saved on device.
+- At zero hunger, a fictional in-game game-over screen appears; Android does not crash and files are not deleted.
 
-## Limitations
+## Technical
 
-The chat is not connected to an external LLM. The BANC motor circuit is a small neural control experiment, not a full brain or a general-purpose AI. The app has not been physically tested on every Android device. If hunger reaches zero, it shows a fictional game-over/reinstall screen; it does not crash Android or delete files.
-
-## Project
-
-- Android package: `com.aitraining.sim`
-- Minimum Android version: Android 6.0 (API 23)
-- Build: Android Gradle Plugin 8.6.1 / Gradle 8.7 / Java 17
+- Package: `com.aitraining.sim`
+- Minimum Android: 6.0 (API 23)
+- Java 17, Gradle 8.7
