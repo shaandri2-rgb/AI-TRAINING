@@ -9,45 +9,41 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Java
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install BANC build dependencies
-        run: python -m pip install --upgrade pandas pyarrow
-      - name: Download public BANC v888 tables
+      - name: Install connectome build tools
+        run: python -m pip install --upgrade pandas pyarrow numpy
+      - name: Download published FlyWire FAFB v783 whole-brain model
         run: |
-          mkdir -p build/banc
+          mkdir -p build/flywire
           curl --fail --location --retry 5 --retry-delay 3 \
-            https://dataverse.harvard.edu/api/access/datafile/14033740 \
-            --output build/banc/banc_888_meta.feather
+            https://raw.githubusercontent.com/philshiu/Drosophila_brain_model/main/Completeness_783.csv \
+            --output build/flywire/Completeness_783.csv
           curl --fail --location --retry 5 --retry-delay 3 \
-            https://dataverse.harvard.edu/api/access/datafile/13992792 \
-            --output build/banc/banc_888_edgelist_simple_v2.feather
-          test -s build/banc/banc_888_meta.feather
-          test -s build/banc/banc_888_edgelist_simple_v2.feather
-      - name: Extract mobile BANC leg circuit
+            https://raw.githubusercontent.com/philshiu/Drosophila_brain_model/main/Connectivity_783.parquet \
+            --output build/flywire/Connectivity_783.parquet
+          test -s build/flywire/Completeness_783.csv
+          test -s build/flywire/Connectivity_783.parquet
+      - name: Pack complete FAFB v783 connectome
         run: |
-          python tools/build_banc_subnet.py \
-            --meta build/banc/banc_888_meta.feather \
-            --edges build/banc/banc_888_edgelist_simple_v2.feather \
-            --out app/src/main/assets/banc_subnet.bin
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+          python tools/build_flywire_brain.py \
+            --completeness build/flywire/Completeness_783.csv \
+            --connectivity build/flywire/Connectivity_783.parquet \
+            --out app/src/main/assets/flywire_brain.bin
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
       - name: Build debug APK
         run: gradle assembleDebug
-      - name: Upload APK
+      - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: My-First-AI-BANC-3D
+          name: My-First-AI-FlyWire-FAFB-v783
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
