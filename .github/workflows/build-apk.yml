@@ -36,6 +36,16 @@ jobs:
             --completeness build/flywire/Completeness_783.csv \
             --connectivity build/flywire/Connectivity_783.parquet \
             --out app/src/main/assets/flywire_brain.bin
+      - name: Validate WebView JavaScript
+        run: |
+          mkdir -p build
+          python - <<'PY'
+          from pathlib import Path
+          html = Path("app/src/main/assets/index.html").read_text()
+          script = html.split("<script>", 1)[1].split("</script>", 1)[0]
+          Path("build/webview.js").write_text(script)
+          PY
+          node --check build/webview.js
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
