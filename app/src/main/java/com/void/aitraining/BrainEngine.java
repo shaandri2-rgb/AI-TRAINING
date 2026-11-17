@@ -3,9 +3,9 @@ package com.aitraining.sim;
 import android.content.res.AssetManager;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.BufferedInputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -32,28 +32,56 @@ public final class BrainEngine {
     private static final float SYNAPSE_GAIN = 0.275f;
 
     public BrainEngine(AssetManager assets) throws IOException {
-        byte[] raw = readAll(assets.open("flywire_brain.bin"));
-        ByteBuffer b = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN);
-        if (b.remaining() < 16 || b.get()!='F' || b.get()!='L' || b.get()!='Y' || b.get()!='W')
-            throw new IOException("Invalid FlyWire asset");
-        int version=b.getInt(); n=b.getInt(); m=b.getInt();
-        long expected=16L+(long)n*8L+(long)(n+1)*4L+(long)m*8L;
-        if(version!=1 || n<100000 || n>200000 || m<1000000 || m>30000000 || expected!=raw.length)
-            throw new IOException("Invalid FlyWire dimensions: "+n+" neurons, "+m+" links");
-        ids=new long[n]; offsets=new int[n+1]; targets=new int[m]; weights=new float[m];
-        for(int i=0;i<n;i++) ids[i]=b.getLong();
-        for(int i=0;i<=n;i++) offsets[i]=b.getInt();
-        for(int i=0;i<m;i++) targets[i]=b.getInt();
-        for(int i=0;i<m;i++) weights[i]=b.getFloat();
-        voltage=new float[n]; input=new float[n]; refractory=new int[n];
-        for(int i=0;i<n;i++) voltage[i]=REST;
+        try (BufferedInputStream in = new BufferedInputStream(assets.open("flywire_brain.bin"), 1048576)) {
+            byte[] header = new byte[16];
+            readFully(in, header, 16);
+            ByteBuffer h = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN);
+            if (h.get() != 'F' || h.get() != 'L' || h.get() != 'Y' || h.get() != 'W') throw new IOException("Invalid FlyWire asset");
+            int version = h.getInt(); n = h.getInt(); m = h.getInt();
+            if (version != 1 || n < 100000 || n > 200000 || m < 1000000 || m > 30000000)
+                throw new IOException("Invalid FlyWire dimensions: " + n + " neurons, " + m + " links");
+            // Stream the large asset directly into arrays; avoid a second full-size byte array.
+            ids = new long[n]; offsets = new int[n + 1]; targets = new int[m]; weights = new float[m];
+            byte[] chunk = new byte[1048576];
+            readLongs(in, ids, chunk);
+            readInts(in, offsets, chunk);
+            readInts(in, targets, chunk);
+            readFloats(in, weights, chunk);
+            if (in.read() != -1) throw new IOException("Unexpected trailing FlyWire asset bytes");
+        }
+        voltage = new float[n]; input = new float[n]; refractory = new int[n];
+        for (int i = 0; i < n; i++) voltage[i] = REST;
     }
 
-    private static byte[] readAll(InputStream in) throws IOException {
-        try(InputStream src=in; ByteArrayOutputStream out=new ByteArrayOutputStream()){
-            byte[] buf=new byte[65536]; int k;
-            while((k=src.read(buf))!=-1) out.write(buf,0,k);
-            return out.toByteArray();
+    private static void readFully(InputStream in, byte[] b, int len) throws IOException {
+        int p = 0;
+        while (p < len) { int k = in.read(b, p, len - p); if (k < 0) throw new IOException("Truncated FlyWire asset"); p += k; }
+    }
+    private static void readLongs(InputStream in, long[] out, byte[] chunk) throws IOException {
+        int p = 0;
+        while (p < out.length) {
+            int count = Math.min(out.length - p, chunk.length / 8), bytes = count * 8;
+            readFully(in, chunk, bytes);
+            ByteBuffer b = ByteBuffer.wrap(chunk, 0, bytes).order(ByteOrder.LITTLE_ENDIAN);
+            for (int i = 0; i < count; i++) out[p++] = b.getLong();
+        }
+    }
+    private static void readInts(InputStream in, int[] out, byte[] chunk) throws IOException {
+        int p = 0;
+        while (p < out.length) {
+            int count = Math.min(out.length - p, chunk.length / 4), bytes = count * 4;
+            readFully(in, chunk, bytes);
+            ByteBuffer b = ByteBuffer.wrap(chunk, 0, bytes).order(ByteOrder.LITTLE_ENDIAN);
+            for (int i = 0; i < count; i++) out[p++] = b.getInt();
+        }
+    }
+    private static void readFloats(InputStream in, float[] out, byte[] chunk) throws IOException {
+        int p = 0;
+        while (p < out.length) {
+            int count = Math.min(out.length - p, chunk.length / 4), bytes = count * 4;
+            readFully(in, chunk, bytes);
+            ByteBuffer b = ByteBuffer.wrap(chunk, 0, bytes).order(ByteOrder.LITTLE_ENDIAN);
+            for (int i = 0; i < count; i++) out[p++] = b.getFloat();
         }
     }
 
