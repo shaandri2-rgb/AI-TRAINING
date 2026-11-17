@@ -42,7 +42,7 @@ if(!data.worldInitialized){
  ];
  data.worldInitialized=true;
 }
-let brainMeta=null,brainSnapshot={stride:0,turn:0,active:[],totalSpikes:0},brainTouch=0,aiX=0,aiZ=0,aiYaw=0,lastDirectorAt=0;
+let brainMeta=null,brainSnapshot={stride:0,turn:0,active:[],totalSpikes:0},brainTouch=0,lastDirectorAt=0,brainTurnSignal=0;
 try{if(window.NativeBrain){brainMeta=JSON.parse(NativeBrain.info());if(brainMeta.error)throw new Error(brainMeta.error)}}catch(e){brainMeta=null;console.error('BANC load failed',e)}
 function drawBrainMap(){
  const c=$('brainCanvas');if(!c||!brainMeta)return;
@@ -70,9 +70,7 @@ function tickBrain(){
  try{
   brainSnapshot=JSON.parse(NativeBrain.step(brainTouch,Math.min(1,brainSnapshot.stride),obstacle));
   brainTouch=0;
-  aiYaw+=brainSnapshot.turn*.025;
-  aiX=Math.max(-2.7,Math.min(2.7,aiX+Math.sin(aiYaw)*brainSnapshot.stride*.025));
-  aiZ=Math.max(-2.7,Math.min(2.7,aiZ-Math.cos(aiYaw)*brainSnapshot.stride*.025));
+  brainTurnSignal=Number(brainSnapshot.turn)||0;
   $('brainSpikes').textContent=brainSnapshot.windowSpikes;
   $('brainTotal').textContent=brainSnapshot.totalSpikes;
   $('brainStride').textContent=Number(brainSnapshot.activity||0).toFixed(2);
@@ -270,16 +268,77 @@ function tr(x,y,z,sx=1,sy=1,sz=1,ry=0){let c=Math.cos(ry),s=Math.sin(ry);return 
 function perspective(f,a,n,z){let f2=1/Math.tan(f/2),nf=1/(n-z);return [f2/a,0,0,0,0,f2,0,0,0,0,(z+n)*nf,-1,0,0,2*z*n*nf,0]}
 function look(eye,at){let z=norm([eye[0]-at[0],eye[1]-at[1],eye[2]-at[2]]),x=norm(cross([0,1,0],z)),y=cross(z,x);return [x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-dot(x,eye),-dot(y,eye),-dot(z,eye),1]}
 function norm(v){let l=Math.hypot(...v)||1;return v.map(x=>x/l)}function cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]}function dot(a,b){return a.reduce((s,x,i)=>s+x*b[i],0)}
-let yaw=0.25,pitch=.2,dist=8,items=[];
+let items=[];
 function add(type,x,y,z,sx,sy,sz,color,ry=0,group=''){items.push({g:meshes[type],m:tr(x,y,z,sx,sy,sz,ry),color,group})}
-function buildWorld(){items=[];add('cube',0,-.35,0,12,.3,12,[.16,.25,.34]);add('cube',0,2.7,-6,12,6,.2,[.12,.2,.3]);add('cube',-6,2.7,0,.2,6,12,[.1,.17,.27]);add('cube',6,2.7,0,.2,6,12,[.1,.17,.27]);
-// Humanoid avatar; whole-brain activity is connected through an experimental game-control mapping.
-add('cylinder',0,1.0,0,.52,1.1,.35,[.18,.68,.82],0,'ai');add('sphere',0,1.85,0,.43,.43,.4,[.72,.87,.96],0,'ai');add('sphere',0,1.95,-.28,.17,.16,.12,[.72,.2,.95],0,'ai');add('sphere',-.15,1.91,-.34,.035,.045,.025,[.04,.1,.16],0,'ai');add('sphere',.15,1.91,-.34,.035,.045,.025,[.04,.1,.16],0,'ai');add('sphere',0,1.79,-.37,.09,.025,.025,[.08,.16,.2],0,'ai');add('cylinder',-.62,1.02,0,.14,.85,.14,[.42,.74,.86],0,'ai');add('cylinder',.62,1.02,0,.14,.85,.14,[.42,.74,.86],0,'ai');add('cylinder',-.22,.15,0,.18,.75,.18,[.25,.48,.65],0,'ai');add('cylinder',.22,.15,0,.18,.75,.18,[.25,.48,.65],0,'ai');
-data.objects.forEach(o=>{let color=o.type==='tree'?[.12,.55,.3]:o.type==='ball'?[.9,.43,.18]:[.6,.65,.72];if(o.type==='tree'){add('cylinder',o.x,.7,o.z,.15,1.4,.15,[.35,.2,.1]);add('sphere',o.x,1.65,o.z,.7,.8,.7,color)}else if(o.type==='ball')add('sphere',o.x,.45,o.z,.45,.45,.45,color);else add('cube',o.x,.45,o.z,.8,.8,.8,color)});
+function buildWorld(){
+ items=[];
+ // A large, flat Roblox-style baseplate with a visible grid and open edges.
+ add('cube',0,-.22,0,100,.22,100,[.13,.29,.22]);
+ for(let i=-95;i<=95;i+=5){
+  add('cube',i,.008,0,.012,.012,100,[.22,.39,.30]);
+  add('cube',0,.009,i,100,.012,.012,[.22,.39,.30]);
+ }
+ // Humanoid: all pieces share the moving root transform.
+ add('cylinder',0,1.0,0,.52,1.1,.35,[.18,.68,.82],0,'ai');
+ add('sphere',0,1.85,0,.43,.43,.4,[.72,.87,.96],0,'ai');
+ add('sphere',0,1.95,-.28,.17,.16,.12,[.72,.2,.95],0,'ai');
+ add('sphere',-.15,1.91,-.34,.035,.045,.025,[.04,.1,.16],0,'ai');
+ add('sphere',.15,1.91,-.34,.035,.045,.025,[.04,.1,.16],0,'ai');
+ add('sphere',0,1.79,-.37,.09,.025,.025,[.08,.16,.2],0,'ai');
+ add('cylinder',-.62,1.02,0,.14,.85,.14,[.42,.74,.86],0,'ai');
+ add('cylinder',.62,1.02,0,.14,.85,.14,[.42,.74,.86],0,'ai');
+ add('cylinder',-.22,.15,0,.18,.75,.18,[.25,.48,.65],0,'ai');
+ add('cylinder',.22,.15,0,.18,.75,.18,[.25,.48,.65],0,'ai');
+ data.objects.forEach(o=>{
+  const v=Math.max(1,Number(o.variant)||1),x=o.x,z=o.z;
+  if(o.type==='tree'){
+   add('cylinder',x,.72,z,.17,.72,.17,[.38,.22,.1]);
+   add('sphere',x,1.7,z,.82,.9,.82,[.12,.55,.3]);
+  }else if(o.type==='ball'){
+   add('sphere',x,.72,z,.72,.72,.72,[.95,.42,.16]);
+  }else if(o.type==='wall'){
+   const len=2.8+v*1.5;
+   add('cube',x,.85,z,len,.85,.42,[.69,.34,.27],aiYaw);
+   add('cube',x,.98,z,.12,.12,.44,[.9,.58,.4],aiYaw);
+  }else if(o.type==='obstacle'){
+   if(v===1)add('cube',x,.72,z,.82,.72,.82,[.91,.48,.19]);
+   if(v===2){add('cube',x,.85,z,1.25,.85,.65,[.87,.34,.26]);add('cube',x,1.8,z,.45,.15,.45,[.98,.68,.25])}
+   if(v===3){add('cylinder',x,.95,z,.78,1.0,.78,[.66,.4,.88]);add('sphere',x,2.0,z,.45,.45,.45,[.85,.66,.98])}
+  }else if(o.type==='ball')add('sphere',x,.72,z,.72,.72,.72,[.95,.42,.16]);
+  else add('cube',x,.72,z,.82*v,.72*v,.82*v,[.61,.69,.79]);
+ });
 }
-function draw(){if(!gl)return;let w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(devicePixelRatio||1,2);if(canvas.width!==w*dpr||canvas.height!==h*dpr){canvas.width=w*dpr;canvas.height=h*dpr}gl.viewport(0,0,canvas.width,canvas.height);gl.enable(gl.DEPTH_TEST);gl.clearColor(.055,.095,.15,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);let target=[0,1,0],eye=[Math.sin(yaw)*Math.cos(pitch)*dist,1+Math.sin(pitch)*dist,Math.cos(yaw)*Math.cos(pitch)*dist],vp=mul(perspective(1,w/h,.1,80),look(eye,target));items.forEach(o=>{gl.bindBuffer(gl.ARRAY_BUFFER,o.g.v);gl.enableVertexAttribArray(loc.p);gl.vertexAttribPointer(loc.p,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ARRAY_BUFFER,o.g.n);gl.enableVertexAttribArray(loc.n);gl.vertexAttribPointer(loc.n,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,o.g.i);let model=o.group==='ai'?mul(tr(aiX,0,aiZ,1,1,1,aiYaw),o.m):o.m;gl.uniformMatrix4fv(loc.model,false,new Float32Array(model));gl.uniformMatrix4fv(loc.mvp,false,new Float32Array(mul(vp,model)));gl.uniform3fv(loc.color,new Float32Array(o.color));gl.drawElements(gl.TRIANGLES,o.g.count,gl.UNSIGNED_SHORT,0)});requestAnimationFrame(draw)}
+let lastFrame=performance.now(),pointerMoved=false,downX=0,downY=0;
+function draw(){
+ if(!gl)return;
+ const now=performance.now(),dt=Math.min(.05,Math.max(0,(now-lastFrame)/1000));lastFrame=now;
+ moveCharacter(dt);
+ if(jumpStarted){const elapsed=(now-jumpStarted)/1000;if(elapsed<.62)jumpOffset=Math.sin(elapsed/.62*Math.PI)*1.05;else{jumpStarted=0;jumpOffset=0}}
+ let w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(devicePixelRatio||1,2);
+ if(canvas.width!==w*dpr||canvas.height!==h*dpr){canvas.width=w*dpr;canvas.height=h*dpr}
+ gl.viewport(0,0,canvas.width,canvas.height);gl.enable(gl.DEPTH_TEST);gl.clearColor(.055,.095,.15,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+ const target=[aiX,1+jumpOffset,aiZ];
+ const eye=[aiX+Math.sin(camYaw)*Math.cos(camPitch)*camDist,1.4+Math.sin(camPitch)*camDist,aiZ+Math.cos(camYaw)*Math.cos(camPitch)*camDist];
+ const vp=mul(perspective(1,w/h,.1,250),look(eye,target));
+ items.forEach(o=>{
+  gl.bindBuffer(gl.ARRAY_BUFFER,o.g.v);gl.enableVertexAttribArray(loc.p);gl.vertexAttribPointer(loc.p,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,o.g.n);gl.enableVertexAttribArray(loc.n);gl.vertexAttribPointer(loc.n,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,o.g.i);
+  const model=o.group==='ai'?mul(tr(aiX,.22+jumpOffset,aiZ,1,1,1,aiYaw),o.m):o.m;
+  gl.uniformMatrix4fv(loc.model,false,new Float32Array(model));
+  gl.uniformMatrix4fv(loc.mvp,false,new Float32Array(mul(vp,model)));
+  gl.uniform3fv(loc.color,new Float32Array(o.color));gl.drawElements(gl.TRIANGLES,o.g.count,gl.UNSIGNED_SHORT,0);
+ });
+ requestAnimationFrame(draw);
+}
 buildWorld();initialiseBrainPanel();draw();setInterval(tickBrain,100);
-let down=false,lx=0,ly=0,pinch=0;canvas.addEventListener('pointerdown',e=>{down=true;lx=e.clientX;ly=e.clientY;canvas.setPointerCapture(e.pointerId)});canvas.addEventListener('pointermove',e=>{if(!down)return;let dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;yaw-=dx*.008;pitch=Math.max(-.35,Math.min(.8,pitch+dy*.006))});canvas.addEventListener('pointerup',e=>{down=false});canvas.addEventListener('wheel',e=>{dist=Math.max(3,Math.min(15,dist+e.deltaY*.01))});
-canvas.addEventListener('click',()=>{brainTouch=1;data.hunger=Math.min(100,data.hunger+10);data.last=Date.now();$('worldNote').textContent='You touched your AI: +10 hunger. It treats your touch like food!';sayAI('A treat! Thank you, Creator!');update()});
-window.addEventListener('resize',()=>{});setInterval(update,30000);update();
+let down=false,lx=0,ly=0;
+canvas.addEventListener('pointerdown',e=>{down=true;pointerMoved=false;downX=lx=e.clientX;downY=ly=e.clientY;canvas.setPointerCapture(e.pointerId)});
+canvas.addEventListener('pointermove',e=>{if(!down)return;const dx=e.clientX-lx,dy=e.clientY-ly;if(Math.hypot(e.clientX-downX,e.clientY-downY)>5)pointerMoved=true;lx=e.clientX;ly=e.clientY;camYaw-=dx*.008;camPitch=Math.max(-.25,Math.min(.85,camPitch+dy*.006))});
+canvas.addEventListener('pointerup',e=>{down=false});
+canvas.addEventListener('pointercancel',()=>{down=false});
+canvas.addEventListener('wheel',e=>{camDist=Math.max(4,Math.min(26,camDist+e.deltaY*.012))});
+canvas.addEventListener('click',()=>{if(pointerMoved)return;brainTouch=1;data.hunger=Math.min(100,data.hunger+10);data.last=Date.now();$('worldNote').textContent='You touched your AI: +10 hunger. It treats your touch like food!';sayAI('A treat! Thank you, Creator!');update()});
+window.addEventListener('resize',()=>{});
+setInterval(update,30000);update();
 </script></body></html>
