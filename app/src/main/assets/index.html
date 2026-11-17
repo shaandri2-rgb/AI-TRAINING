@@ -216,7 +216,7 @@ function moveCharacter(dt){
    const range=objectRadius(o)+1.7+Math.min(learned*.22,2.4);
    if(d<range){const push=(range-d)/range;dx+=(ox/d)*push*2.8;dz+=(oz/d)*push*2.8}
   }
-  const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+  const steerLen=Math.hypot(dx,dz)||1;dx/=steerLen;dz/=steerLen;
  }else{updateWorldInfo();return}
  const speed=(data.speed||3)*1.45;
  const nx=Math.max(-97,Math.min(97,aiX+dx*speed*dt));
