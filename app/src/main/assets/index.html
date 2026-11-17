@@ -2,6 +2,7 @@
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>MY FIRST AI 3D</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#070d18;color:#eaf3ff;font:14px system-ui;overflow:hidden}header{height:48px;padding:8px 13px;background:#101a2b;display:flex;justify-content:space-between;align-items:center}header b{color:#8de2ff;letter-spacing:1px}.stats{padding:7px 13px;background:#111d30;font-size:12px}.track{height:7px;background:#293951;border-radius:8px;overflow:hidden;margin-top:4px}.fill{height:100%;background:#67dfb0;width:100%}#view{display:block;width:100%;height:48vh;touch-action:none;background:linear-gradient(#152b43,#253b50)}.tabs{display:flex;gap:5px;padding:7px;background:#0d1728;overflow:auto}.tabs button,.actions button,.send button{background:#172a43;color:#eaf3ff;border:1px solid #344e6e;border-radius:9px;padding:8px 10px;white-space:nowrap}.tabs button.active{background:#14516b}.panel{height:calc(52vh - 48px - 42px - 40px);min-height:135px;overflow:auto;padding:9px 12px}.hidden{display:none}.bubble{background:#15243a;border:1px solid #2d425f;border-radius:10px;padding:8px;margin:6px 0}.me{background:#123a50}.small{font-size:11px;color:#a8bad0}.actions{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}.send{display:flex;gap:6px;position:sticky;bottom:0;background:#070d18;padding:6px 0}.send input{flex:1;min-width:0;background:#101e31;border:1px solid #344e6e;border-radius:9px;color:white;padding:9px}.item{padding:6px;border-bottom:1px solid #2b3e57}#dead{display:none;position:fixed;inset:0;background:#05070d;z-index:5;text-align:center;padding:20vh 20px}
+#brainCanvas{display:block;width:100%;height:170px;background:#0a1627;border:1px solid #2d425f;border-radius:10px;margin:8px 0}#brainIds{max-height:130px;overflow:auto;word-break:break-word}.brain-live{color:#8de2ff;font-weight:700}
 </style></head><body>
 <header><b>◈ MY FIRST AI · 3D</b><span id="stage">NEWBORN</span></header>
 <div class="stats">🍎 HUNGER <b id="hungerText">100%</b><div class="track"><div class="fill" id="hungerFill"></div></div><span id="remaining" class="small">10 hours remaining</span></div>
@@ -10,12 +11,52 @@
 <section id="world" class="panel"><b>3D HOME WORLD</b><p class="small">Drag to orbit the camera · pinch to zoom · tap your AI to give it a treat (+10 hunger).</p><div class="actions"><button onclick="feed(10,'Apple')">🍎 Apple +10</button><button onclick="feed(20,'Bread')">🍞 Bread +20</button><button onclick="feed(30,'Meat')">🥩 Meat +30</button><button onclick="feed(40,'Cake')">🍰 Cake +40</button></div><div id="worldNote" class="small">Your AI is waiting for you.</div></section>
 <section id="chat" class="panel hidden"><b>Talk & teach</b><div id="messages"><div class="bubble">Hello... I just woke up. What should I learn first?</div></div><div class="send"><input id="msg" placeholder="Teach me something..."><button onclick="send()">Send</button></div><p class="small">Local simulated learning. No external AI model is connected yet.</p></section>
 <section id="memory" class="panel hidden"><b>Memory viewer</b><div id="memories" class="small">No memories yet.</div></section>
-<section id="brain" class="panel hidden"><b>Brain activity</b><div class="bubble">🧠 Neural activity: <span id="activity">idle</span></div><div class="bubble">Learned memories: <span id="count">0</span></div><div class="bubble">Last thought: <span id="thought">Waiting</span></div><p class="small">Fictional visualization, not a biological brain or conscious mind.</p></section>
+<section id="brain" class="panel hidden"><b>BANC v888 · LIVE FRUIT-FLY CONNECTOME</b><p class="small">A real, measured 50-neuron leg-control circuit extracted from the public BANC v888 female fruit-fly connectome. The game's LIF timing and avatar controls are calibrated approximations.</p><div class="bubble">Status: <span id="brainStatus" class="brain-live">Loading connectome…</span></div><div class="bubble">Neurons: <b id="brainNeurons">—</b> · Measured links: <b id="brainEdges">—</b></div><canvas id="brainCanvas" width="360" height="170"></canvas><div class="bubble">Neural spikes this window: <b id="brainSpikes">0</b> · Total: <b id="brainTotal">0</b></div><div class="bubble">Motor output — stride: <b id="brainStride">0.00</b> · turn: <b id="brainTurn">0.00</b></div><div class="bubble">Neuron groups: <span id="brainGroups">—</span></div><details><summary>Show selected neuron IDs</summary><div id="brainIds" class="small"></div></details><div class="bubble">Learned memories: <span id="count">0</span><br>Last thought: <span id="thought">Waiting</span></div><p class="small">Source data: BANC v888 · Harvard Dataverse DOI 10.7910/DVN/7WTH1N · CC BY 4.0. Not a complete fruit-fly brain and not evidence of consciousness.</p></section>
 <section id="creator" class="panel hidden"><b>Creator console</b><p class="small">Enter commands in Chat: /obstacle 1, /wall 1, /cube 1, /ball 1, /tree 1, /remove, /clear.</p><div id="objects"></div><div class="actions"><button onclick="clearObjects()">Clear spawned objects</button></div></section>
 <div id="dead"><h1 style="color:#ff8797">GAME OVER</h1><h2>YOUR AI HAS DIED.</h2><p>THE WORLD IS CORRUPTED.</p><p>REINSTALL THE GAME TO START AGAIN.</p><button onclick="localStorage.removeItem('myFirstAI3D');location.reload()" style="padding:12px 20px;background:#1d4964;color:white;border:0;border-radius:9px">Restart Simulation</button><p class="small">This is an in-game screen. Android and your files are not crashed or deleted.</p></div>
 <script>
 const $=x=>document.getElementById(x);
 let data=JSON.parse(localStorage.getItem('myFirstAI3D')||'null')||{hunger:100,last:Date.now(),dead:false,memories:[],objects:[]};
+let brainMeta=null,brainSnapshot={stride:0,turn:0,active:[],totalSpikes:0},brainTouch=0,aiX=0,aiZ=0,aiYaw=0;
+try{if(window.NativeBrain){brainMeta=JSON.parse(NativeBrain.info());if(brainMeta.error)throw new Error(brainMeta.error)}}catch(e){brainMeta=null;console.error('BANC load failed',e)}
+function drawBrainMap(active=[]){
+ const c=$('brainCanvas');if(!c||!brainMeta)return;
+ const ctx=c.getContext('2d'),w=c.width,h=c.height;ctx.clearRect(0,0,w,h);
+ const ns=brainMeta.sensory,ni=brainMeta.interneurons,n=brainMeta.neurons,ids=brainMeta.ids||[];
+ const pos=i=>{let group=i<ns?0:i<ns+ni?1:2;let start=group===0?0:group===1?ns:ns+ni;let size=group===0?ns:group===1?ni:brainMeta.motor;let x=group===0?48:group===1?180:312;let y=15+(i-start+1)*(h-30)/(size+1);return [x,y]};
+ (brainMeta.edges||[]).forEach(e=>{let a=pos(e[0]),b=pos(e[1]);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.strokeStyle='rgba(92,181,220,'+Math.min(.65,.08+e[2]*.55)+')';ctx.lineWidth=1;ctx.stroke()});
+ for(let i=0;i<n;i++){let p=pos(i),g=i<ns?0:i<ns+ni?1:2;ctx.beginPath();ctx.arc(p[0],p[1],active.includes(i)?5:3.4,0,Math.PI*2);ctx.fillStyle=active.includes(i)?'#fff29a':g===0?'#4ed8c5':g===1?'#8c9dff':'#f19b64';ctx.fill()}
+ ctx.font='10px system-ui';ctx.fillStyle='#b9cce0';ctx.fillText('SENSORY',14,11);ctx.fillText('INTER',154,11);ctx.fillText('MOTOR',286,11);
+}
+function initialiseBrainPanel(){
+ if(!brainMeta){$('brainStatus').textContent='Native BANC data unavailable';return}
+ $('brainStatus').textContent='LIVE · BANC v888';
+ $('brainNeurons').textContent=brainMeta.neurons;
+ $('brainEdges').textContent=(brainMeta.edges||[]).length;
+ $('brainGroups').textContent=brainMeta.sensory+' sensory · '+brainMeta.interneurons+' interneurons · '+brainMeta.motor+' motor';
+ $('brainIds').textContent=(brainMeta.ids||[]).map((id,i)=>(i+1)+'. '+id).join('  |  ');
+ drawBrainMap([]);
+}
+function tickBrain(){
+ if(!brainMeta||!window.NativeBrain)return;
+ let obstacle=0,best=99;
+ data.objects.forEach(o=>{let d=Math.hypot(o.x-aiX,o.z-aiZ);if(d<best)best=d});
+ if(best<2.5)obstacle=Math.max(0,(2.5-best)/2.5);
+ try{
+  brainSnapshot=JSON.parse(NativeBrain.step(brainTouch,Math.min(1,brainSnapshot.stride),obstacle));
+  brainTouch=0;
+  aiYaw+=brainSnapshot.turn*.025;
+  aiX=Math.max(-2.7,Math.min(2.7,aiX+Math.sin(aiYaw)*brainSnapshot.stride*.025));
+  aiZ=Math.max(-2.7,Math.min(2.7,aiZ-Math.cos(aiYaw)*brainSnapshot.stride*.025));
+  $('brainSpikes').textContent=brainSnapshot.windowSpikes;
+  $('brainTotal').textContent=brainSnapshot.totalSpikes;
+  $('brainStride').textContent=Number(brainSnapshot.stride).toFixed(2);
+  $('brainTurn').textContent=Number(brainSnapshot.turn).toFixed(2);
+  $('activity').textContent=brainSnapshot.activeCount+' active neurons';
+  drawBrainMap(brainSnapshot.active||[]);
+ }catch(e){$('brainStatus').textContent='Simulation error';console.error(e)}
+}
+
 function save(){localStorage.setItem('myFirstAI3D',JSON.stringify(data))}
 function update(){
  if(data.dead){$('dead').style.display='block';return}
@@ -53,15 +94,15 @@ function perspective(f,a,n,z){let f2=1/Math.tan(f/2),nf=1/(n-z);return [f2/a,0,0
 function look(eye,at){let z=norm([eye[0]-at[0],eye[1]-at[1],eye[2]-at[2]]),x=norm(cross([0,1,0],z)),y=cross(z,x);return [x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-dot(x,eye),-dot(y,eye),-dot(z,eye),1]}
 function norm(v){let l=Math.hypot(...v)||1;return v.map(x=>x/l)}function cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]}function dot(a,b){return a.reduce((s,x,i)=>s+x*b[i],0)}
 let yaw=0.25,pitch=.2,dist=8,items=[];
-function add(type,x,y,z,sx,sy,sz,color,ry=0){items.push({g:meshes[type],m:tr(x,y,z,sx,sy,sz,ry),color})}
+function add(type,x,y,z,sx,sy,sz,color,ry=0,group=''){items.push({g:meshes[type],m:tr(x,y,z,sx,sy,sz,ry),color,group})}
 function buildWorld(){items=[];add('cube',0,-.35,0,12,.3,12,[.16,.25,.34]);add('cube',0,2.7,-6,12,6,.2,[.12,.2,.3]);add('cube',-6,2.7,0,.2,6,12,[.1,.17,.27]);add('cube',6,2.7,0,.2,6,12,[.1,.17,.27]);
-// humanoid AI: torso, head, limbs and glowing brain sphere
-add('cylinder',0,1.0,0,.52,1.1,.35,[.18,.68,.82]);add('sphere',0,1.85,0,.43,.43,.4,[.72,.87,.96]);add('sphere',0,1.95,-.28,.17,.16,.12,[.72,.2,.95]);add('sphere',-.15,1.91,-.34,.035,.045,.025,[.04,.1,.16]);add('sphere',.15,1.91,-.34,.035,.045,.025,[.04,.1,.16]);add('sphere',0,1.79,-.37,.09,.025,.025,[.08,.16,.2]);add('cylinder',-.62,1.02,0,.14,.85,.14,[.42,.74,.86],0);add('cylinder',.62,1.02,0,.14,.85,.14,[.42,.74,.86],0);add('cylinder',-.22,.15,0,.18,.75,.18,[.25,.48,.65]);add('cylinder',.22,.15,0,.18,.75,.18,[.25,.48,.65]);
+// Humanoid avatar; native BANC leg-circuit motor spikes drive its root movement.
+add('cylinder',0,1.0,0,.52,1.1,.35,[.18,.68,.82],0,'ai');add('sphere',0,1.85,0,.43,.43,.4,[.72,.87,.96],0,'ai');add('sphere',0,1.95,-.28,.17,.16,.12,[.72,.2,.95],0,'ai');add('sphere',-.15,1.91,-.34,.035,.045,.025,[.04,.1,.16],0,'ai');add('sphere',.15,1.91,-.34,.035,.045,.025,[.04,.1,.16],0,'ai');add('sphere',0,1.79,-.37,.09,.025,.025,[.08,.16,.2],0,'ai');add('cylinder',-.62,1.02,0,.14,.85,.14,[.42,.74,.86],0,'ai');add('cylinder',.62,1.02,0,.14,.85,.14,[.42,.74,.86],0,'ai');add('cylinder',-.22,.15,0,.18,.75,.18,[.25,.48,.65],0,'ai');add('cylinder',.22,.15,0,.18,.75,.18,[.25,.48,.65],0,'ai');
 data.objects.forEach(o=>{let color=o.type==='tree'?[.12,.55,.3]:o.type==='ball'?[.9,.43,.18]:[.6,.65,.72];if(o.type==='tree'){add('cylinder',o.x,.7,o.z,.15,1.4,.15,[.35,.2,.1]);add('sphere',o.x,1.65,o.z,.7,.8,.7,color)}else if(o.type==='ball')add('sphere',o.x,.45,o.z,.45,.45,.45,color);else add('cube',o.x,.45,o.z,.8,.8,.8,color)});
 }
-function draw(){if(!gl)return;let w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(devicePixelRatio||1,2);if(canvas.width!==w*dpr||canvas.height!==h*dpr){canvas.width=w*dpr;canvas.height=h*dpr}gl.viewport(0,0,canvas.width,canvas.height);gl.enable(gl.DEPTH_TEST);gl.clearColor(.055,.095,.15,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);let target=[0,1,0],eye=[Math.sin(yaw)*Math.cos(pitch)*dist,1+Math.sin(pitch)*dist,Math.cos(yaw)*Math.cos(pitch)*dist],vp=mul(perspective(1,w/h,.1,80),look(eye,target));items.forEach(o=>{gl.bindBuffer(gl.ARRAY_BUFFER,o.g.v);gl.enableVertexAttribArray(loc.p);gl.vertexAttribPointer(loc.p,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ARRAY_BUFFER,o.g.n);gl.enableVertexAttribArray(loc.n);gl.vertexAttribPointer(loc.n,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,o.g.i);gl.uniformMatrix4fv(loc.model,false,new Float32Array(o.m));gl.uniformMatrix4fv(loc.mvp,false,new Float32Array(mul(vp,o.m)));gl.uniform3fv(loc.color,new Float32Array(o.color));gl.drawElements(gl.TRIANGLES,o.g.count,gl.UNSIGNED_SHORT,0)});requestAnimationFrame(draw)}
-buildWorld();draw();
+function draw(){if(!gl)return;let w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(devicePixelRatio||1,2);if(canvas.width!==w*dpr||canvas.height!==h*dpr){canvas.width=w*dpr;canvas.height=h*dpr}gl.viewport(0,0,canvas.width,canvas.height);gl.enable(gl.DEPTH_TEST);gl.clearColor(.055,.095,.15,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);let target=[0,1,0],eye=[Math.sin(yaw)*Math.cos(pitch)*dist,1+Math.sin(pitch)*dist,Math.cos(yaw)*Math.cos(pitch)*dist],vp=mul(perspective(1,w/h,.1,80),look(eye,target));items.forEach(o=>{gl.bindBuffer(gl.ARRAY_BUFFER,o.g.v);gl.enableVertexAttribArray(loc.p);gl.vertexAttribPointer(loc.p,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ARRAY_BUFFER,o.g.n);gl.enableVertexAttribArray(loc.n);gl.vertexAttribPointer(loc.n,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,o.g.i);let model=o.group==='ai'?mul(tr(aiX,0,aiZ,1,1,1,aiYaw),o.m):o.m;gl.uniformMatrix4fv(loc.model,false,new Float32Array(model));gl.uniformMatrix4fv(loc.mvp,false,new Float32Array(mul(vp,model)));gl.uniform3fv(loc.color,new Float32Array(o.color));gl.drawElements(gl.TRIANGLES,o.g.count,gl.UNSIGNED_SHORT,0)});requestAnimationFrame(draw)}
+buildWorld();initialiseBrainPanel();draw();setInterval(tickBrain,100);
 let down=false,lx=0,ly=0,pinch=0;canvas.addEventListener('pointerdown',e=>{down=true;lx=e.clientX;ly=e.clientY;canvas.setPointerCapture(e.pointerId)});canvas.addEventListener('pointermove',e=>{if(!down)return;let dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;yaw-=dx*.008;pitch=Math.max(-.35,Math.min(.8,pitch+dy*.006))});canvas.addEventListener('pointerup',e=>{down=false});canvas.addEventListener('wheel',e=>{dist=Math.max(3,Math.min(15,dist+e.deltaY*.01))});
-canvas.addEventListener('click',()=>{data.hunger=Math.min(100,data.hunger+10);data.last=Date.now();$('worldNote').textContent='You touched your AI: +10 hunger. It treats your touch like food!';sayAI('A treat! Thank you, Creator!');update()});
+canvas.addEventListener('click',()=>{brainTouch=1;data.hunger=Math.min(100,data.hunger+10);data.last=Date.now();$('worldNote').textContent='You touched your AI: +10 hunger. It treats your touch like food!';sayAI('A treat! Thank you, Creator!');update()});
 window.addEventListener('resize',()=>{});setInterval(update,30000);update();
 </script></body></html>
