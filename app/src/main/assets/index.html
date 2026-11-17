@@ -80,28 +80,18 @@ function tickBrain(){
    lastDirectorAt=Date.now();
    const types={1:'obstacle',2:'tree',3:'ball'};
    const type=types[brainSnapshot.director]||'obstacle';
-   data.objects.push({type,variant:1,x:(Math.random()-.5)*5,z:-2-Math.random()*5});
-   $('worldNote').textContent='The brain activity triggered the game director: a '+type+' appeared.';
-   renderObjects();buildWorld();save();
+   spawnObject(type,1,aiX+(Math.random()-.5)*12,aiZ+(Math.random()-.5)*12);
+   $('worldNote').textContent='Brain activity triggered the game director: a '+type+' appeared.';
   }
  }catch(e){$('brainStatus').textContent='Simulation error';console.error(e)}
 }
-function save(){localStorage.setItem('myFirstAI3D',JSON.stringify(data))}
-function update(){
- if(data.dead){$('dead').style.display='block';return}
- let now=Date.now();data.hunger=Math.max(0,data.hunger-Math.max(0,now-data.last)/(10*3600000)*100);data.last=now;
- if(data.hunger<=0){data.dead=true;save();$('dead').style.display='block';return}
- $('hungerText').textContent=Math.floor(data.hunger)+'%';$('hungerFill').style.width=data.hunger+'%';$('remaining').textContent=(data.hunger*.1).toFixed(1)+' hours until empty';
- $('stage').textContent=data.memories.length<2?'NEWBORN':data.memories.length<5?'CURIOUS':data.memories.length<10?'LEARNING':data.memories.length<20?'DEVELOPING':'INDEPENDENT';
- $('count').textContent=data.memories.length;renderMemories();renderObjects();save()
-}
 let aiX=Number(data.playerX)||0,aiZ=Number(data.playerZ)||0,aiYaw=0;
 let camYaw=0.25,camPitch=.27,camDist=10,moveInput={x:0,z:0},keysDown={};
-let autoTarget=null,lastMoveSave=0,jumpStarted=0,jumpOffset=0,lastHitTime=0;
+let autoTarget=null,lastMoveSave=0,jumpStarted=0,jumpOffset=0;
 function save(){data.playerX=aiX;data.playerZ=aiZ;localStorage.setItem('myFirstAI3D',JSON.stringify(data))}
 function objectRadius(o){
  if(o.radius)return Number(o.radius);
- return o.type==='wall'?2.6:o.type==='tree'?1.15:o.type==='ball'?.7:1;
+ return o.type==='wall'?3.8:o.type==='tree'?1.15:o.type==='ball'?.7:1;
 }
 function findCollision(x,z,extra=.65){
  for(const o of data.objects){const d=Math.hypot(x-o.x,z-o.z),r=objectRadius(o)+extra;if(d<r)return o}
@@ -151,7 +141,14 @@ function resetWorld(){
 function clearObjects(){data.objects=[];data.worldInitialized=true;buildWorld();renderObjects();save();$('worldNote').textContent='The baseplate is clear. Use /resetworld to restore the obstacle course.'}
 function command(v){
  const p=v.trim().toLowerCase().split(/\s+/),c=p[0],n=Number(p[1]||1);
- if(c==='/help'){sayAI('Commands: /obstacle 1-3, /wall 1-3, /cube, /ball, /tree, /remove, /clear, /resetworld, /autoroam on/off, /speed 1-5, /tp x z.');return}
+ if(c==='/help'){sayAI('Commands: /obstacle 1-3, /wall 1-3, /cube 1-3, /ball, /tree, /spawn obstacle 2, /remove, /clear, /resetworld, /autoroam on/off, /speed 1-5, /tp x z, /position, /jump.');return}
+ if(c==='/position'){sayAI('My position is '+aiX.toFixed(1)+', '+aiZ.toFixed(1)+'.');return}
+ if(c==='/jump'){triggerJump();sayAI('Boing!');return}
+ if(c==='/spawn'){
+  const type=p[1]||'obstacle',variant=Number(p[2]||1);
+  if(!['obstacle','wall','cube','ball','tree'].includes(type)||variant<1||variant>3){sayAI('Use /spawn obstacle 1, /spawn wall 2, /spawn cube 1, /spawn ball 1 or /spawn tree 1.');return}
+  spawnObject(type,variant);sayAI('Spawned '+type+'.');return;
+ }
  if(c==='/clear'){clearObjects();sayAI('All obstacles cleared.');return}
  if(c==='/resetworld'){resetWorld();return}
  if(c==='/remove'){removeNearest();return}
@@ -243,7 +240,7 @@ function setupJoystick(){
  stick.addEventListener('pointercancel',stop);
 }
 function triggerJump(){jumpStarted=performance.now()}
-window.addEventListener('keydown',e=>{if(['w','a','s','d','ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)){keysDown[e.key]=true;e.preventDefault()}});
+window.addEventListener('keydown',e=>{if(['w','a','s','d','ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)){keysDown[e.key]=true;if(e.key===' ')triggerJump();e.preventDefault()}});
 window.addEventListener('keyup',e=>{keysDown[e.key]=false});
 window.addEventListener('blur',()=>{keysDown={};moveInput={x:0,z:0}});
 if($('autoBtn'))$('autoBtn').onclick=()=>{data.autoRoam=!data.autoRoam;autoTarget=null;updateWorldInfo();save()};
