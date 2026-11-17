@@ -16,6 +16,29 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install BANC build dependencies
+        run: python -m pip install --upgrade pandas pyarrow
+      - name: Download public BANC v888 tables
+        run: |
+          mkdir -p build/banc
+          curl --fail --location --retry 5 --retry-delay 3 \
+            https://dataverse.harvard.edu/api/access/datafile/14033740 \
+            --output build/banc/banc_888_meta.feather
+          curl --fail --location --retry 5 --retry-delay 3 \
+            https://dataverse.harvard.edu/api/access/datafile/13992792 \
+            --output build/banc/banc_888_edgelist_simple_v2.feather
+          test -s build/banc/banc_888_meta.feather
+          test -s build/banc/banc_888_edgelist_simple_v2.feather
+      - name: Extract mobile BANC leg circuit
+        run: |
+          python tools/build_banc_subnet.py \
+            --meta build/banc/banc_888_meta.feather \
+            --edges build/banc/banc_888_edgelist_simple_v2.feather \
+            --out app/src/main/assets/banc_subnet.bin
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -25,6 +48,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: My-First-AI-debug-apk
+          name: My-First-AI-BANC-3D
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
