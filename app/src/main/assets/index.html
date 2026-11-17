@@ -24,6 +24,24 @@
 <script>
 const $=x=>document.getElementById(x);
 let data=JSON.parse(localStorage.getItem('myFirstAI3D')||'null')||{hunger:100,last:Date.now(),dead:false,memories:[],objects:[]};
+data.memories=Array.isArray(data.memories)?data.memories:[];
+data.objects=Array.isArray(data.objects)?data.objects:[];
+data.obstacleLearning=data.obstacleLearning||{};
+data.autoRoam=data.autoRoam!==false;
+data.speed=Math.max(1,Math.min(5,Number(data.speed)||3));
+data.worldInitialized=!!data.worldInitialized;
+if(!data.worldInitialized){
+ data.objects=[
+  {type:'obstacle',variant:1,x:5,z:-7,radius:1.05,starter:true},
+  {type:'obstacle',variant:2,x:-6,z:-10,radius:1.35,starter:true},
+  {type:'wall',variant:1,x:10,z:3,radius:2.8,starter:true},
+  {type:'cube',variant:1,x:-11,z:4,radius:1.15,starter:true},
+  {type:'tree',variant:1,x:1,z:-15,radius:1.25,starter:true},
+  {type:'ball',variant:1,x:-3,z:9,radius:.75,starter:true},
+  {type:'wall',variant:2,x:17,z:-12,radius:3.4,starter:true}
+ ];
+ data.worldInitialized=true;
+}
 let brainMeta=null,brainSnapshot={stride:0,turn:0,active:[],totalSpikes:0},brainTouch=0,aiX=0,aiZ=0,aiYaw=0,lastDirectorAt=0;
 try{if(window.NativeBrain){brainMeta=JSON.parse(NativeBrain.info());if(brainMeta.error)throw new Error(brainMeta.error)}}catch(e){brainMeta=null;console.error('BANC load failed',e)}
 function drawBrainMap(){
@@ -79,14 +97,160 @@ function update(){
  $('stage').textContent=data.memories.length<2?'NEWBORN':data.memories.length<5?'CURIOUS':data.memories.length<10?'LEARNING':data.memories.length<20?'DEVELOPING':'INDEPENDENT';
  $('count').textContent=data.memories.length;renderMemories();renderObjects();save()
 }
+let aiX=Number(data.playerX)||0,aiZ=Number(data.playerZ)||0,aiYaw=0;
+let camYaw=0.25,camPitch=.27,camDist=10,moveInput={x:0,z:0},keysDown={};
+let autoTarget=null,lastMoveSave=0,jumpStarted=0,jumpOffset=0,lastHitTime=0;
+function save(){data.playerX=aiX;data.playerZ=aiZ;localStorage.setItem('myFirstAI3D',JSON.stringify(data))}
+function objectRadius(o){
+ if(o.radius)return Number(o.radius);
+ return o.type==='wall'?2.6:o.type==='tree'?1.15:o.type==='ball'?.7:1;
+}
+function findCollision(x,z,extra=.65){
+ for(const o of data.objects){const d=Math.hypot(x-o.x,z-o.z),r=objectRadius(o)+extra;if(d<r)return o}
+ return null;
+}
+function learnFromObstacle(o){
+ const now=Date.now();if(o._lastHit&&now-o._lastHit<1400)return;
+ o._lastHit=now;
+ const type=o.type||'obstacle';
+ data.obstacleLearning[type]=(data.obstacleLearning[type]||0)+1;
+ data.totalCollisions=(data.totalCollisions||0)+1;
+ const note='I bumped into a '+type+'. I will give '+type+'s more space next time.';
+ data.lastLesson=note;
+ if(!data.memories.includes(note))data.memories.push(note);
+ if(data.memories.length>100)data.memories.shift();
+ $('worldNote').textContent='Learning: '+note;
+ $('thought').textContent='Learning to avoid '+type+'s';
+ $('activity').textContent='Obstacle lesson recorded';
+ if(typeof sayAI==='function')sayAI(note);
+ save();updateWorldInfo();
+}
+function spawnObject(type,variant=1,x=null,z=null){
+ const v=Math.max(1,Math.min(3,Number(variant)||1));
+ const fx=Math.sin(aiYaw),fz=-Math.cos(aiYaw);
+ if(x===null||z===null){x=aiX+fx*5+Math.cos(aiYaw)*(data.objects.length%3-1)*2;z=aiZ+fz*5+Math.sin(aiYaw)*(data.objects.length%3-1)*2}
+ let radius=type==='wall'?(1.9+v*.65):type==='tree'?1.2:type==='ball'?.72:type==='cube'?1.15:(.85+v*.25);
+ const o={type,variant:v,x:Number(x),z:Number(z),radius,starter:false};
+ if(findCollision(o.x,o.z,.2)){o.x+=Math.cos(aiYaw)*2.4;o.z+=Math.sin(aiYaw)*2.4}
+ data.objects.push(o);buildWorld();renderObjects();save();
+ $('worldNote').textContent='Spawned '+type+' '+v+' at '+o.x.toFixed(1)+', '+o.z.toFixed(1)+'.';
+ return o;
+}
+function removeNearest(){
+ if(!data.objects.length){sayAI('There are no obstacles to remove.');return}
+ let idx=0,best=Infinity;
+ data.objects.forEach((o,i)=>{const d=Math.hypot(o.x-aiX,o.z-aiZ);if(d<best){best=d;idx=i}});
+ const o=data.objects.splice(idx,1)[0];buildWorld();renderObjects();save();sayAI('Removed the nearest '+o.type+'.');
+}
+function resetWorld(){
+ data.objects=[];data.worldInitialized=true;data.obstacleLearning={};data.totalCollisions=0;data.memories=data.memories.filter(m=>!String(m).startsWith('I bumped into a '));
+ const items=[
+  ['obstacle',1,5,-7],['obstacle',2,-6,-10],['wall',1,10,3],['cube',1,-11,4],['tree',1,1,-15],['ball',1,-3,9],['wall',2,17,-12]
+ ];
+ items.forEach(v=>data.objects.push({type:v[0],variant:v[1],x:v[2],z:v[3],radius:v[0]==='wall'?2.8:v[0]==='tree'?1.25:v[0]==='ball'?.75:1.1,starter:true}));
+ buildWorld();renderObjects();update();sayAI('I rebuilt the obstacle course. Let me explore!');
+}
+function clearObjects(){data.objects=[];data.worldInitialized=true;buildWorld();renderObjects();save();$('worldNote').textContent='The baseplate is clear. Use /resetworld to restore the obstacle course.'}
+function command(v){
+ const p=v.trim().toLowerCase().split(/\s+/),c=p[0],n=Number(p[1]||1);
+ if(c==='/help'){sayAI('Commands: /obstacle 1-3, /wall 1-3, /cube, /ball, /tree, /remove, /clear, /resetworld, /autoroam on/off, /speed 1-5, /tp x z.');return}
+ if(c==='/clear'){clearObjects();sayAI('All obstacles cleared.');return}
+ if(c==='/resetworld'){resetWorld();return}
+ if(c==='/remove'){removeNearest();return}
+ if(c==='/obstacle'||c==='/wall'||c==='/cube'||c==='/ball'||c==='/tree'){
+  if(!Number.isFinite(n)||n<1||n>3){sayAI('Choose a variant from 1 to 3.');return}
+  spawnObject(c.slice(1),n);sayAI('I added a '+c.slice(1)+' obstacle.');return;
+ }
+ if(c==='/autoroam'){
+  data.autoRoam=p[1]!=='off';autoTarget=null;updateWorldInfo();save();sayAI('Auto roam '+(data.autoRoam?'enabled.':'disabled.'));return;
+ }
+ if(c==='/speed'){
+  const v2=Number(p[1]);if(!Number.isFinite(v2)||v2<1||v2>5){sayAI('Speed must be from 1 to 5.');return}
+  data.speed=v2;save();sayAI('Movement speed set to '+v2+'.');return;
+ }
+ if(c==='/tp'){
+  const x=Number(p[1]),z=Number(p[2]);if(!Number.isFinite(x)||!Number.isFinite(z)||Math.abs(x)>95||Math.abs(z)>95){sayAI('Use /tp x z with coordinates between -95 and 95.');return}
+  aiX=x;aiZ=z;autoTarget=null;save();sayAI('Teleported to '+x+', '+z+'.');return;
+ }
+ sayAI('Unknown command. Type /help for commands.');
+}
+function runCreatorCommand(){const el=$('creatorCmd');if(!el)return;const v=el.value.trim();el.value='';if(v)command(v)}
 function feed(n,name){data.hunger=Math.min(100,data.hunger+n);data.last=Date.now();$('worldNote').textContent='Yum! '+name+' was delicious. Thank you, Creator!';sayAI('That was tasty! Thank you!');update()}
-function sayAI(t){let d=document.createElement('div');d.className='bubble';d.textContent='AI: '+t;$('messages').appendChild(d)}
-function send(){let v=$('msg').value.trim();if(!v)return;$('msg').value='';if(v[0]==='/'){command(v);return}let d=document.createElement('div');d.className='bubble me';d.textContent='You: '+v;$('messages').appendChild(d);if(!data.memories.includes(v))data.memories.push(v);$('thought').textContent='Processing new information';$('activity').textContent='learning';sayAI(v.toLowerCase().includes('hello')?'Hello, Creator!':v.toLowerCase().includes('name')?'I am still learning my name. What should it be?':'I will remember that. Can you teach me more?');update()}
+function sayAI(t){let d=document.createElement('div');d.className='bubble';d.textContent='AI: '+t;$('messages').appendChild(d);$('messages').scrollTop=$('messages').scrollHeight}
+function send(){let v=$('msg').value.trim();if(!v)return;$('msg').value='';if(v[0]==='/'){command(v);return}let d=document.createElement('div');d.className='bubble me';d.textContent='You: '+v;$('messages').appendChild(d);if(!data.memories.includes(v))data.memories.push(v);$('thought').textContent='Processing new information';sayAI(v.toLowerCase().includes('hello')?'Hello, Creator!':v.toLowerCase().includes('name')?'I am still learning my name. What should it be?':'I will remember that. Can you teach me more?');update()}
 $('msg').addEventListener('keydown',e=>{if(e.key==='Enter')send()});
-function command(v){let p=v.toLowerCase().split(/\s+/),c=p[0],n=+(p[1]||1);if(c==='/clear'){clearObjects();return}if(c==='/remove'){data.objects.pop()}else if(['/obstacle','/wall','/cube','/ball','/tree'].includes(c)&&n>=1&&n<=3){data.objects.push({type:c.slice(1),variant:n,x:(Math.random()-.5)*5,z:-2-Math.random()*5});sayAI('Spawned '+c.slice(1)+' '+n+' in the 3D world.')}else{sayAI('Unknown command or invalid number.')}update();buildWorld()}
-function clearObjects(){data.objects=[];update();buildWorld()}
+if($('creatorCmd'))$('creatorCmd').addEventListener('keydown',e=>{if(e.key==='Enter')runCreatorCommand()});
 function renderMemories(){$('memories').innerHTML='';data.memories.forEach((m,i)=>{let d=document.createElement('div');d.className='item';d.textContent=(i+1)+'. '+m;$('memories').appendChild(d)})}
-function renderObjects(){$('objects').innerHTML='';data.objects.forEach(o=>{let d=document.createElement('div');d.className='item';d.textContent=o.type+' '+o.variant;$('objects').appendChild(d)})}
+function renderObjects(){$('objects').innerHTML='';data.objects.forEach((o,i)=>{let d=document.createElement('div');d.className='item';const learned=data.obstacleLearning[o.type]||0;d.textContent=(i+1)+'. '+o.type+' '+(o.variant||1)+' · '+o.x.toFixed(1)+', '+o.z.toFixed(1)+(learned?' · learned hits: '+learned:'');$('objects').appendChild(d)})}
+function updateWorldInfo(){
+ if(!$('worldStats'))return;
+ const total=Object.values(data.obstacleLearning||{}).reduce((a,b)=>a+Number(b||0),0);
+ $('worldStats').textContent='Position: '+aiX.toFixed(1)+', '+aiZ.toFixed(1)+' · Learned bumps: '+total+' · Obstacles: '+data.objects.length;
+ $('moveMode').textContent=moveInput.x||moveInput.z||Object.values(keysDown).some(Boolean)?'MANUAL CONTROL':(data.autoRoam?'AUTO ROAM: ON':'AUTO ROAM: OFF');
+ $('autoBtn').textContent='Auto roam '+(data.autoRoam?'ON':'OFF');$('autoBtn').classList.toggle('on',data.autoRoam);
+}
+function update(){
+ if(data.dead){$('dead').style.display='block';return}
+ let now=Date.now();data.hunger=Math.max(0,data.hunger-Math.max(0,now-data.last)/(10*3600000)*100);data.last=now;
+ if(data.hunger<=0){data.dead=true;save();$('dead').style.display='block';return}
+ $('hungerText').textContent=Math.floor(data.hunger)+'%';$('hungerFill').style.width=data.hunger+'%';$('remaining').textContent=(data.hunger*.1).toFixed(1)+' hours until empty';
+ $('stage').textContent=data.memories.length<2?'NEWBORN':data.memories.length<5?'CURIOUS':data.memories.length<10?'LEARNING':data.memories.length<20?'DEVELOPING':'INDEPENDENT';
+ $('count').textContent=data.memories.length;renderMemories();renderObjects();updateWorldInfo();save()
+}
+function manualVector(){
+ let x=moveInput.x,z=moveInput.z;
+ if(keysDown.a||keysDown.ArrowLeft)x-=1;if(keysDown.d||keysDown.ArrowRight)x+=1;
+ if(keysDown.w||keysDown.ArrowUp)z-=1;if(keysDown.s||keysDown.ArrowDown)z+=1;
+ const len=Math.hypot(x,z);if(len>1){x/=len;z/=len}return {x,z,active:len>.12};
+}
+function moveCharacter(dt){
+ const input=manualVector();let dx=0,dz=0,manual=input.active;
+ if(manual){
+  const forward=-input.z,right=input.x;
+  dx=right*Math.cos(camYaw)-forward*Math.sin(camYaw);
+  dz=-right*Math.sin(camYaw)-forward*Math.cos(camYaw);
+ }else if(data.autoRoam){
+  if(!autoTarget||Math.hypot(autoTarget.x-aiX,autoTarget.z-aiZ)<2.5){
+   autoTarget={x:Math.max(-82,Math.min(82,aiX+(Math.random()-.5)*55)),z:Math.max(-82,Math.min(82,aiZ+(Math.random()-.5)*55))};
+  }
+  dx=autoTarget.x-aiX;dz=autoTarget.z-aiZ;const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+  // Learned obstacle avoidance grows with the number of previous collisions.
+  for(const o of data.objects){
+   const ox=aiX-o.x,oz=aiZ-o.z,d=Math.hypot(ox,oz)||.001;
+   const learned=Number(data.obstacleLearning[o.type]||0);
+   const range=objectRadius(o)+1.7+Math.min(learned*.22,2.4);
+   if(d<range){const push=(range-d)/range;dx+=(ox/d)*push*2.8;dz+=(oz/d)*push*2.8}
+  }
+  const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+ }else{updateWorldInfo();return}
+ const speed=(data.speed||3)*1.45;
+ const nx=Math.max(-97,Math.min(97,aiX+dx*speed*dt));
+ const nz=Math.max(-97,Math.min(97,aiZ+dz*speed*dt));
+ const hit=findCollision(nx,nz,.72);
+ if(hit){
+  learnFromObstacle(hit);
+  if(!manual){autoTarget=null;const side=dx;dx=-dz;dz=side;const ax=aiX+dx*speed*dt,az=aiZ+dz*speed*dt;if(!findCollision(ax,az,.72)){aiX=ax;aiZ=az}}
+ }else{aiX=nx;aiZ=nz}
+ if(Math.hypot(dx,dz)>.05)aiYaw=Math.atan2(dx,-dz);
+ if(Date.now()-lastMoveSave>1000){lastMoveSave=Date.now();save();updateWorldInfo()}
+}
+function setupJoystick(){
+ const stick=$('stick'),knob=$('knob');if(!stick||!knob)return;
+ let active=null;
+ const set=(e)=>{const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,dx=e.clientX-cx,dy=e.clientY-cy,max=38,l=Math.hypot(dx,dy)||1,k=Math.min(1,max/l);moveInput={x:dx*k/max,z:dy*k/max};knob.style.transform='translate('+dx*k+'px,'+dy*k+'px)'};
+ const stop=()=>{active=null;moveInput={x:0,z:0};knob.style.transform='translate(0,0)'};
+ stick.addEventListener('pointerdown',e=>{active=e.pointerId;stick.setPointerCapture(e.pointerId);set(e);e.preventDefault()});
+ stick.addEventListener('pointermove',e=>{if(active===e.pointerId)set(e)});
+ stick.addEventListener('pointerup',e=>{if(active===e.pointerId)stop()});
+ stick.addEventListener('pointercancel',stop);
+}
+function triggerJump(){jumpStarted=performance.now()}
+window.addEventListener('keydown',e=>{if(['w','a','s','d','ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)){keysDown[e.key]=true;e.preventDefault()}});
+window.addEventListener('keyup',e=>{keysDown[e.key]=false});
+window.addEventListener('blur',()=>{keysDown={};moveInput={x:0,z:0}});
+if($('autoBtn'))$('autoBtn').onclick=()=>{data.autoRoam=!data.autoRoam;autoTarget=null;updateWorldInfo();save()};
+if($('jumpBtn'))$('jumpBtn').onclick=triggerJump;
+setupJoystick();
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.panel').forEach(x=>x.classList.add('hidden'));$(b.dataset.tab).classList.remove('hidden')});
 // Lightweight WebGL renderer: all world geometry is real 3D, with perspective depth and orbit camera.
 const canvas=$('view'),gl=canvas.getContext('webgl',{antialias:true,alpha:false});
