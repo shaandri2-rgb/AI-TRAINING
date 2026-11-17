@@ -46,19 +46,22 @@ motor_mask = (
 sensory = sorted(set(meta.loc[sensory_mask, "root_id"]) & pre_ids)
 motor = sorted(set(meta.loc[motor_mask, "root_id"]) & post_ids)
 
-if len(sensory) < 6 or len(motor) < 6:
-    raise SystemExit(f"Not enough leg sensory/motor cells found: sensory={len(sensory)}, motor={len(motor)}")
+if len(sensory) < 18 or len(motor) < 12:
+    raise SystemExit(f"Need 18 leg sensory and 12 leg motor cells; found sensory={len(sensory)}, motor={len(motor)}")
 
 # Keep the selected circuit small enough for real-time mobile simulation.
 sensory = sensory[:18]
-motor = motor[:12]
+sensory_set = set(sensory)
+motor = [nid for nid in motor if nid not in sensory_set][:12]
+if len(motor) < 12:
+    raise SystemExit(f"Could not select 12 distinct motor cells; found {len(motor)}")
 posts_of_sensory = set(edges.loc[edges["pre"].isin(sensory), "post"])
 pres_of_motor = set(edges.loc[edges["post"].isin(motor), "pre"])
 inter_candidates = sorted(posts_of_sensory & pres_of_motor - set(sensory) - set(motor))
-if len(inter_candidates) < 4:
-    raise SystemExit(f"Could not find a connected sensory-to-motor interneuron path (found {len(inter_candidates)}).")
+if len(inter_candidates) < 20:
+    raise SystemExit(f"Need 20 connected sensory-to-motor interneurons; found {len(inter_candidates)}.")
 rng = random.Random(7)
-inter = sorted(rng.sample(inter_candidates, min(20, len(inter_candidates))))
+inter = sorted(rng.sample(inter_candidates, 20))
 
 ids = sensory + inter + motor
 n_s, n_i, n_m = len(sensory), len(inter), len(motor)
