@@ -42,11 +42,9 @@ The FlyWire data have their own terms and attribution requirements. Check the cu
 
 ## Other game features
 
-- Touch-friendly WebGL 3D world and humanoid AI avatar.
 - Local chat teaching and memory entries (scripted; no external LLM is connected).
 - Hunger drains over ten real-world hours, including while the app is closed.
 - Food buttons restore hunger.
-- Creator commands: `/obstacle 1` through `/obstacle 3`, `/wall 1`, `/cube 1`, `/ball 1`, `/tree 1`, `/remove`, and `/clear`.
 - Memory, brain activity and creator panels.
 - Local progress saved on device.
 - At zero hunger, a fictional in-game game-over screen appears; Android does not crash and files are not deleted.
